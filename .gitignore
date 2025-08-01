@@ -1,3 +1,4 @@
 reading_data/.ipynb_checkpoints/Romagnolo2024-checkpoint.ipynb
 CosmicIntegration/.ipynb_checkpoints/cosmic-integration-SSPC-checkpoint.ipynb
 CosmicIntegration/.ipynb_checkpoints/cosmic-integration-compas-fix-checkpoint.ipynb
+*.pyc
