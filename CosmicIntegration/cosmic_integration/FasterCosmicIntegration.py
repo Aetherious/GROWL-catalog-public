@@ -421,12 +421,6 @@ def find_detection_rate(path, dco_type="BBH", merger_output_filename=None, weigh
         warnings.warn("SNR step is greater than 1.0, large step sizes can produce unpredictable results", stacklevel=2)
 
     # start by getting the necessary data from the COMPAS file
-    # faster_CI=True # faster_CI fix 
-    # if faster_CI:
-
-
-    ### WORKING HeRe 
-    # else:
     COMPAS = ClassCOMPAS.COMPASData(path, Mlower=m1_min, Mupper=m1_max, m2_min=m2_min, binaryFraction=fbin, suppress_reminder=True)
     COMPAS.setCOMPASDCOmask(types=dco_type, withinHubbleTime=merges_hubble_time, pessimistic=pessimistic_CEE, noRLOFafterCEE=no_RLOF_after_CEE)
     COMPAS.setCOMPASData()
@@ -437,10 +431,9 @@ def find_detection_rate(path, dco_type="BBH", merger_output_filename=None, weigh
         COMPAS.Mlower=min(m1[m1!=m2])*u.Msun    # the m1!=m2 ensures we don't include masses set equal through RLOF at ZAMS
         COMPAS.Mupper=max(m1)*u.Msun
         COMPAS.m2_min=min(m2)*u.Msun
+    COMPAS.find_star_forming_mass_per_binary_sampling()
     del m1
     del m2
-    COMPAS.find_star_forming_mass_per_binary_sampling()
-
 
     # compute the chirp masses and symmetric mass ratios only for systems of interest
     chirp_masses = (COMPAS.mass1*COMPAS.mass2)**(3/5) / (COMPAS.mass1 + COMPAS.mass2)**(1/5)
@@ -484,7 +477,7 @@ def find_detection_rate(path, dco_type="BBH", merger_output_filename=None, weigh
     metallicitySystems = COMPAS.metallicitySystems
     delayTimes =  COMPAS.delayTimes
     sw_weights = COMPAS.sw_weights
-    del COMPAS 
+    # del COMPAS 
 
 
     # calculate the formation and merger rates using what we computed above
@@ -505,11 +498,6 @@ def find_detection_rate(path, dco_type="BBH", merger_output_filename=None, weigh
 
     if(merger_output_filename!=None): # Store merger rates in an output text file if specified
 
-        COMPAS = ClassCOMPAS.COMPASData(path, Mlower=m1_min, Mupper=m1_max, m2_min=m2_min, binaryFraction=fbin, suppress_reminder=True)
-        COMPAS.setCOMPASDCOmask(types=dco_type, withinHubbleTime=merges_hubble_time, pessimistic=pessimistic_CEE, noRLOFafterCEE=no_RLOF_after_CEE)
-        COMPAS.setCOMPASData()
-        COMPAS.set_sw_weights(weight_column)
-
         with open(path+merger_output_filename, 'w') as output:
             output.write('Mass1atMerger \t Mass2atMerger \t MergerRedshift \t MergerRate \n')
             output.write('Msun \t Msun \t -- \t Gpc^{-3} yr^{-1} \n')
@@ -517,7 +505,7 @@ def find_detection_rate(path, dco_type="BBH", merger_output_filename=None, weigh
                 for j in range(n_binaries):
                     if(merger_rate[j][i]>0):
                         output.write(f'{COMPAS.mass1[j]:.5f}\t{COMPAS.mass2[j]:.5f}\t{redshifts[i]:.5f}\t{merger_rate[j][i]:.10f}\n')
-    return formation_rate, merger_rate, redshifts
+    return formation_rate, merger_rate, redshifts, COMPAS
 
     # else:
     #     # create lookup tables for the SNR at 1Mpc as a function of the masses and the probability of detection as a function of SNR
@@ -577,12 +565,6 @@ def append_rates(path, formation_rate, merger_rate, redshifts, COMPAS, n_redshif
     """
 
     cosmology = get_cosmology(cosmology)
-
-
-    COMPAS = ClassCOMPAS.COMPASData(path, Mlower=m1_min, Mupper=m1_max, m2_min=m2_min, binaryFraction=fbin, suppress_reminder=True)
-    COMPAS.setCOMPASDCOmask(types=dco_type, withinHubbleTime=merges_hubble_time, pessimistic=pessimistic_CEE, noRLOFafterCEE=no_RLOF_after_CEE)
-    COMPAS.setCOMPASData()
-    COMPAS.set_sw_weights(weight_column)
 
     print('shape redshifts', np.shape(redshifts))
     print('shape COMPAS.sw_weights', np.shape(COMPAS.sw_weights) )
@@ -901,7 +883,7 @@ def main():
     #####################################
     # Run the cosmic integration
     start_CI = time.time()
-    formation_rate, merger_rate, redshifts = find_detection_rate(
+    formation_rate, merger_rate, redshifts, COMPAS = find_detection_rate(
         args.path,
         dco_type=args.dco_type,
         weight_column=args.weight_column,
@@ -934,9 +916,15 @@ def main():
     #####################################
     # Append your freshly calculated merger rates to the hdf5 file
     start_append = time.time()
+
+    # COMPAS = ClassCOMPAS.COMPASData(args.path, Mlower=m1_min, Mupper=m1_max, m2_min=m2_min, binaryFraction=fbin, suppress_reminder=True)
+    # COMPAS.setCOMPASDCOmask(types=dco_type, withinHubbleTime=merges_hubble_time, pessimistic=pessimistic_CEE, noRLOFafterCEE=no_RLOF_after_CEE)
+    # COMPAS.setCOMPASData()
+    # COMPAS.set_sw_weights(weight_column)
+
     if args.append_rates:
         n_redshifts_detection = int(args.max_redshift_detection / args.redshift_step)
-        append_rates(args.path, detection_rate, formation_rate, merger_rate, redshifts, COMPAS, n_redshifts_detection,
+        append_rates(args.path, formation_rate, merger_rate, redshifts, COMPAS, n_redshifts_detection,
                      maxz=args.max_redshift_detection, sensitivity=args.sensitivity, dco_type=args.dco_type,
                      mu0=args.mu0, muz=args.muz, sigma0=args.sigma0, sigmaz=args.sigmaz, alpha=args.alpha,
                      append_binned_by_z=False, redshift_binsize=0.05, cosmology=cosmology)
@@ -950,15 +938,15 @@ def main():
 
     #####################################
     # Plot your result
-    start_plot = time.time()
-    chirp_masses = (COMPAS.mass1 * COMPAS.mass2) ** (3. / 5.) / (COMPAS.mass1 + COMPAS.mass2) ** (1. / 5.)
-    plot_rates(args.path, formation_rate, merger_rate, detection_rate, redshifts, chirp_masses, show_plot=False,
-               mu0=args.mu0, muz=args.muz, sigma0=args.sigma0, sigmaz=args.sigmaz, alpha=args.alpha)
-    end_plot = time.time()
+    # start_plot = time.time()
+    # chirp_masses = (COMPAS.mass1 * COMPAS.mass2) ** (3. / 5.) / (COMPAS.mass1 + COMPAS.mass2) ** (1. / 5.)
+    # plot_rates(args.path, formation_rate, merger_rate, detection_rate, redshifts, chirp_masses, show_plot=False,
+    #            mu0=args.mu0, muz=args.muz, sigma0=args.sigma0, sigmaz=args.sigmaz, alpha=args.alpha)
+    # end_plot = time.time()
 
     print('CI took ', end_CI - start_CI, 's')
     print('Appending rates took ', end_append - start_append, 's')
-    print('plot took ', end_plot - start_plot, 's')
+    # print('plot took ', end_plot - start_plot, 's')
 
 
 ##################################################################
