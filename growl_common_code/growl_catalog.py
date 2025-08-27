@@ -30,6 +30,25 @@ class DCOParameters:
     n_systems: int
 
 
+
+
+def get_folder_path_convolution_output(catalog, author, dataset):
+    """
+    Get the full path to an HDF5 file where we want to save the SSPC convolution
+    for a specific author and dataset.
+    """
+    if author not in catalog:
+        raise ValueError(f"Author '{author}' not found in catalog")
+    
+    if dataset not in catalog[author]['paths']:
+        raise ValueError(f"Dataset '{dataset}' not found for author '{author}'")
+    
+#     path = 
+
+    return catalog[author]['paths'][dataset]
+
+
+
         
 def get_file_path(catalog, author, dataset):
     """
