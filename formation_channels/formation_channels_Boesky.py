@@ -176,14 +176,16 @@ def identify_formation_channels(seeds, file):
     channels[classic_caseA_mask] = 1 # classify case A same as original channel
     channels[only_stable_caseA_mask] = 2 #  # classify case A same as original channel
 
-    # within the other channel, assign other with CE  as -1
+
     other_channel_mask_CE = np.in1d(seeds, all_cee_seeds)
-    mask_other_with_CE = (channels==0) & (other_channel_mask_CE==1)
-    channels[mask_other_with_CE] = -1 
     
     # within the other channel, assign other without CE  as -2
     mask_other_without_CE = (channels==0) & (other_channel_mask_CE==0)
     channels[mask_other_without_CE] = -2
+
+    # within the other channel, assign other with CE  as -1
+    mask_other_with_CE = (channels==0) & (other_channel_mask_CE==1)
+    channels[mask_other_with_CE] = -1 
 
 
     return channels
