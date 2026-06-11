@@ -48,6 +48,38 @@ METALLICITY_GRID_BROEKGAARDEN22 = np.array([
 
 
 # ---------------------------------------------------------------------------
+# The 20 binary-population-synthesis (BPS) variations from Broekgaarden+22
+# (https://arxiv.org/abs/2103.02608), labelled A-T. Each entry gives the
+# sub-directory (relative to a top-level data directory containing one
+# COMPASOutput.h5 per variation), whether the "optimistic" common-envelope
+# assumption should be used (see `get_dco_mask`), and a short label for
+# plotting/legends.
+# ---------------------------------------------------------------------------
+BROEKGAARDEN22_MODELS = [
+    {'name': 'A', 'directory': 'fiducial', 'optimistic': False, 'label': 'fiducial'},
+    {'name': 'B', 'directory': 'massTransferEfficiencyFixed_0_25', 'optimistic': False, 'label': r'$\beta=0.25$'},
+    {'name': 'C', 'directory': 'massTransferEfficiencyFixed_0_5', 'optimistic': False, 'label': r'$\beta=0.5$'},
+    {'name': 'D', 'directory': 'massTransferEfficiencyFixed_0_75', 'optimistic': False, 'label': r'$\beta=0.75$'},
+    {'name': 'E', 'directory': 'unstableCaseBB', 'optimistic': False, 'label': 'unstable case BB'},
+    {'name': 'F', 'directory': 'unstableCaseBB', 'optimistic': True, 'label': 'unstable case BB + optimistic CE'},
+    {'name': 'G', 'directory': 'alpha0_1', 'optimistic': False, 'label': r'$\alpha_{\rm CE}=0.1$'},
+    {'name': 'H', 'directory': 'alpha0_5', 'optimistic': False, 'label': r'$\alpha_{\rm CE}=0.5$'},
+    {'name': 'I', 'directory': 'alpha2_0', 'optimistic': False, 'label': r'$\alpha_{\rm CE}=2$'},
+    {'name': 'J', 'directory': 'alpha10', 'optimistic': False, 'label': r'$\alpha_{\rm CE}=10$'},
+    {'name': 'K', 'directory': 'fiducial', 'optimistic': True, 'label': 'optimistic CE'},
+    {'name': 'L', 'directory': 'rapid', 'optimistic': False, 'label': 'rapid SN'},
+    {'name': 'M', 'directory': 'maxNSmass2_0', 'optimistic': False, 'label': r'max $m_{\rm NS}=2.0\,M_\odot$'},
+    {'name': 'N', 'directory': 'maxNSmass3_0', 'optimistic': False, 'label': r'max $m_{\rm NS}=3.0\,M_\odot$'},
+    {'name': 'O', 'directory': 'noPISN', 'optimistic': False, 'label': 'no PISN'},
+    {'name': 'P', 'directory': 'ccSNkick_100km_s', 'optimistic': False, 'label': r'$\sigma_{\rm rms}^{\rm 1D}=100\,{\rm km/s}$'},
+    {'name': 'Q', 'directory': 'ccSNkick_30km_s', 'optimistic': False, 'label': r'$\sigma_{\rm rms}^{\rm 1D}=30\,{\rm km/s}$'},
+    {'name': 'R', 'directory': 'noBHkick', 'optimistic': False, 'label': r'$v_{\rm k,BH}=0\,{\rm km/s}$'},
+    {'name': 'S', 'directory': 'wolf_rayet_multiplier_0_1', 'optimistic': False, 'label': r'$f_{\rm WR}=0.1$'},
+    {'name': 'T', 'directory': 'wolf_rayet_multiplier_5', 'optimistic': False, 'label': r'$f_{\rm WR}=5$'},
+]
+
+
+# ---------------------------------------------------------------------------
 # Kroupa IMF sampling (three-part broken power law), used to work out which
 # fraction of all star-forming mass is represented by the binaries that
 # COMPAS actually simulates (i.e. those with primary mass in
@@ -389,3 +421,72 @@ def calculate_formation_efficiency_per_binary(
     binaries['formation_efficiency'] = binaries['weight'] / total_mass_evolved_per_Z[z_index]
 
     return binaries, metallicity_grid, total_mass_evolved_per_Z
+
+
+# ---------------------------------------------------------------------------
+# Formation efficiency vs. metallicity, for one or more DCO types at once
+# ---------------------------------------------------------------------------
+
+def calculate_formation_efficiency_vs_metallicity(
+        path: str,
+        dco_types: Sequence[str] = ('BBH', 'BHNS', 'BNS'),
+        m1_min: float = 5.0,
+        m1_max: float = 150.0,
+        binary_fraction: float = 1.0,
+        within_hubble_time: bool = True,
+        optimistic: bool = False,
+        no_rlof_after_cee: bool = True,
+        n_imf_samples: int = 2_000_000,
+        random_seed: Optional[int] = None,
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Total formation efficiency eta(Z) for one or more DCO types.
+
+    This sums the per-binary formation efficiencies in each metallicity bin,
+    i.e. ``eta(Z) = sum(weight_i) / total_mass_evolved_at_Z`` for binaries i
+    of the requested type at metallicity Z. It is a cheaper alternative to
+    calling `calculate_formation_efficiency_per_binary` separately for each
+    DCO type, since the (slow) IMF-normalisation and the DCO table are each
+    only read once.
+
+    Parameters
+    ----------
+    path : str
+        Path to a COMPAS ``COMPASOutput.h5`` file.
+    dco_types : sequence of {'BBH', 'BHBH', 'BNS', 'NSNS', 'BHNS'}
+        DCO types to compute eta(Z) for.
+    m1_min, m1_max, binary_fraction, n_imf_samples, random_seed :
+        See `get_total_mass_evolved_per_metallicity`.
+    within_hubble_time, optimistic, no_rlof_after_cee : bool
+        DCO selection options, see `get_dco_mask`.
+
+    Returns
+    -------
+    metallicity_grid : np.ndarray
+        Sorted, unique metallicities simulated by COMPAS.
+    formation_efficiency_per_Z : dict[str, np.ndarray]
+        Maps each requested DCO type to its eta(Z) array (Msun^-1), aligned
+        with `metallicity_grid`.
+    """
+    for dco_type in dco_types:
+        if dco_type.upper() not in VALID_DCO_TYPES:
+            raise ValueError(f"dco_type={dco_type!r} not recognised; choose from {VALID_DCO_TYPES}")
+
+    metallicity_grid, total_mass_evolved_per_Z = get_total_mass_evolved_per_metallicity(
+        path, m1_min=m1_min, m1_max=m1_max, binary_fraction=binary_fraction,
+        n_imf_samples=n_imf_samples, random_seed=random_seed)
+
+    formation_efficiency_per_Z = {}
+    with h5.File(path, 'r') as f:
+        fdco = f['doubleCompactObjects']
+        metallicity = fdco['Metallicity1'][...].squeeze()
+        weight = fdco['weight'][...].squeeze()
+
+        for dco_type in dco_types:
+            mask = get_dco_mask(f, dco_type=dco_type, within_hubble_time=within_hubble_time,
+                                 optimistic=optimistic, no_rlof_after_cee=no_rlof_after_cee)
+
+            z_index = np.searchsorted(metallicity_grid, metallicity[mask])
+            weight_per_Z = np.bincount(z_index, weights=weight[mask], minlength=len(metallicity_grid))
+            formation_efficiency_per_Z[dco_type] = weight_per_Z / total_mass_evolved_per_Z
+
+    return metallicity_grid, formation_efficiency_per_Z
